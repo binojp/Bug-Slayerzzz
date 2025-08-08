@@ -1,0 +1,47 @@
+/* The main ping icon */
+.ping {
+  background-color: #ff4136; /* Red color */
+  border-radius: 50%;
+  box-shadow: 0 0 0 0 rgba(255, 65, 54, 1);
+  animation: pulse 2s infinite;
+}
+
+/* The pulsing animation */
+@keyframes pulse {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(255, 65, 54, 0.7);
+  }
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 10px rgba(255, 65, 54, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(255, 65, 54, 0);
+  }
+}
+
+/* Styling for the popup */
+.popup-content h3 {
+  margin: 0 0 5px 0;
+}
+.popup-content p {
+  margin: 0;
+}
+
+/* Simple back button */
+.back-button {
+    position: absolute;
+    top: 10px;
+    left: 50px;
+    z-index: 1000;
+    padding: 8px 12px;
+    background-color: white;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.back-button:hover {
+    background-color: #f4f4f4;
+}
