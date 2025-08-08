@@ -1,4 +1,6 @@
 import React, { useState } from "react";
+import axios from "axios";
+import { useNavigate } from "react-router-dom";
 
 export default function RegisterForm() {
   const [formData, setFormData] = useState({
@@ -8,6 +10,7 @@ export default function RegisterForm() {
     confirmPassword: "",
   });
   const [errors, setErrors] = useState({});
+  const navigate = useNavigate();
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -31,10 +34,32 @@ export default function RegisterForm() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validate()) return;
-    alert("Registered Successfully!");
+
+    try {
+      const response = await axios.post(
+        `${import.meta.env.VITE_API_URL}/api/register`,
+        {
+          name: formData.name,
+          email: formData.email,
+          password: formData.password,
+        }
+      );
+
+      const { token, user } = response.data;
+      localStorage.setItem("token", token);
+      localStorage.setItem("user", JSON.stringify(user));
+
+      navigate("/user/dashboard");
+    } catch (err) {
+      setErrors({
+        server:
+          err.response?.data?.message ||
+          "Registration failed. Please try again.",
+      });
+    }
   };
 
   return (
@@ -48,7 +73,6 @@ export default function RegisterForm() {
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Name */}
           <div>
             <label className="block text-sm font-medium text-gray-700">
               Name
@@ -66,7 +90,6 @@ export default function RegisterForm() {
             )}
           </div>
 
-          {/* Email */}
           <div>
             <label className="block text-sm font-medium text-gray-700">
               Email
@@ -84,7 +107,6 @@ export default function RegisterForm() {
             )}
           </div>
 
-          {/* Password */}
           <div>
             <label className="block text-sm font-medium text-gray-700">
               Password
@@ -102,7 +124,6 @@ export default function RegisterForm() {
             )}
           </div>
 
-          {/* Confirm Password */}
           <div>
             <label className="block text-sm font-medium text-gray-700">
               Confirm Password
@@ -122,7 +143,10 @@ export default function RegisterForm() {
             )}
           </div>
 
-          {/* Button */}
+          {errors.server && (
+            <p className="text-sm text-red-500 mt-1">{errors.server}</p>
+          )}
+
           <button
             type="submit"
             className="w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded-md text-sm font-medium transition"
