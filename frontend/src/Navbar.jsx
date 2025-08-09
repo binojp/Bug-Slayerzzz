@@ -4,7 +4,7 @@ import { useState } from "react";
 // The navigation links and auth buttons are now separated into sub-components for clarity.
 const navLinks = [
   { href: "/heatmap", label: "Heatmap" },
-  { href: "/uploadimg", label: "Report" },
+  { href: "/report", label: "Report" },
   { href: "/leaderboard", label: "Leaderboard" },
 ];
 

@@ -1,3 +1,4 @@
+// src/UploadPage.jsx
 import React, { useState, useRef, useEffect } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
@@ -116,10 +117,9 @@ const FileUploader = ({ files, setFiles, maxFiles, mode }) => {
 };
 
 // Map Component for Leaflet Fallback
-const LocationPicker = ({ setLocation, setLocationError }) => {
+const LocationPicker = ({ setLocation, setLocationName, setLocationError }) => {
   const [position, setPosition] = useState(null);
 
-  // Ensure map re-renders on position change
   const MapClickHandler = () => {
     const map = useMapEvents({
       click(e) {
@@ -127,7 +127,17 @@ const LocationPicker = ({ setLocation, setLocationError }) => {
         setPosition([lat, lng]);
         setLocation({ lat, lon: lng });
         setLocationError("");
-        map.setView([lat, lng], 13); // Zoom to clicked location
+        map.setView([lat, lng], 13);
+        // Reverse geocode
+        axios
+          .get(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`
+          )
+          .then((response) => {
+            const address = response.data.display_name || "Unknown location";
+            setLocationName(address);
+          })
+          .catch(() => setLocationName("Unable to fetch location name"));
       },
     });
     return position ? (
@@ -160,10 +170,15 @@ export default function UploadPage() {
   const [reportFiles, setReportFiles] = useState([]);
   const [cleanupFiles, setCleanupFiles] = useState([]);
   const [location, setLocation] = useState(null);
+  const [locationName, setLocationName] = useState("");
   const [isTracking, setIsTracking] = useState(false);
   const [locationError, setLocationError] = useState("");
   const [showMap, setShowMap] = useState(false);
-  const [formData, setFormData] = useState({ title: "", description: "" });
+  const [formData, setFormData] = useState({
+    title: "",
+    description: "",
+    severity: "Low", // Default for report
+  });
   const [errors, setErrors] = useState({});
   const [imageUrl, setImageUrl] = useState(null);
   const navigate = useNavigate();
@@ -180,6 +195,9 @@ export default function UploadPage() {
     if (!formData.description.trim()) {
       newErrors.description = "Please enter a description.";
     }
+    if (mode === "report" && !formData.severity) {
+      newErrors.severity = "Please select a severity.";
+    }
     const files = mode === "report" ? reportFiles : cleanupFiles;
     if (files.length === 0) {
       newErrors.media = "Please upload at least one file.";
@@ -192,6 +210,7 @@ export default function UploadPage() {
     setIsTracking(true);
     setLocationError("");
     setLocation(null);
+    setLocationName("");
     setShowMap(false);
 
     if (!navigator.geolocation) {
@@ -206,6 +225,16 @@ export default function UploadPage() {
         const { latitude, longitude } = position.coords;
         setLocation({ lat: latitude, lon: longitude });
         setIsTracking(false);
+        // Reverse geocode
+        axios
+          .get(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`
+          )
+          .then((response) => {
+            const address = response.data.display_name || "Unknown location";
+            setLocationName(address);
+          })
+          .catch(() => setLocationName("Unable to fetch location name"));
       },
       (error) => {
         if (error.code === error.PERMISSION_DENIED) {
@@ -238,6 +267,13 @@ export default function UploadPage() {
     if (location) {
       data.append("latitude", location.lat);
       data.append("longitude", location.lon);
+      data.append(
+        "location",
+        locationName || `${location.lat}, ${location.lon}`
+      );
+    }
+    if (mode === "report") {
+      data.append("severity", formData.severity);
     }
     files.forEach((file) => data.append("media", file));
 
@@ -262,10 +298,11 @@ export default function UploadPage() {
 
       setImageUrl(response.data.mediaUrls[0]);
       alert("Report submitted successfully!");
-      setFormData({ title: "", description: "" });
+      setFormData({ title: "", description: "", severity: "Low" });
       setReportFiles([]);
       setCleanupFiles([]);
       setLocation(null);
+      setLocationName("");
       setShowMap(false);
     } catch (err) {
       setErrors({
@@ -280,10 +317,12 @@ export default function UploadPage() {
   useEffect(() => {
     setReportFiles([]);
     setCleanupFiles([]);
-    setFormData({ title: "", description: "" });
+    setFormData({ title: "", description: "", severity: "Low" });
     setErrors({});
     setImageUrl(null);
     setShowMap(false);
+    setLocation(null);
+    setLocationName("");
   }, [mode]);
 
   return (
@@ -355,6 +394,27 @@ export default function UploadPage() {
             )}
           </div>
 
+          {mode === "report" && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Severity
+              </label>
+              <select
+                name="severity"
+                value={formData.severity}
+                onChange={handleChange}
+                className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              >
+                <option value="Low">Low</option>
+                <option value="Medium">Medium</option>
+                <option value="High">High</option>
+              </select>
+              {errors.severity && (
+                <p className="text-sm text-red-500 mt-1">{errors.severity}</p>
+              )}
+            </div>
+          )}
+
           <div>
             {mode === "report" ? (
               <FileUploader
@@ -397,8 +457,9 @@ export default function UploadPage() {
             </button>
             {location && (
               <div className="mt-4 text-center bg-emerald-100 p-3 rounded-lg text-emerald-700 text-sm font-medium">
-                Location Acquired: {location.lat.toFixed(4)},{" "}
-                {location.lon.toFixed(4)}
+                Location:{" "}
+                {locationName ||
+                  `${location.lat.toFixed(4)}, ${location.lon.toFixed(4)}`}
               </div>
             )}
             {locationError && (
@@ -413,6 +474,7 @@ export default function UploadPage() {
                 </label>
                 <LocationPicker
                   setLocation={setLocation}
+                  setLocationName={setLocationName}
                   setLocationError={setLocationError}
                 />
               </div>

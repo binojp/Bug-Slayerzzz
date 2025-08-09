@@ -1,4 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import axios from "axios";
+import { useNavigate } from "react-router-dom";
 import {
   MapPin,
   Award,
@@ -24,145 +26,100 @@ import {
   BarChart3,
   User,
 } from "lucide-react";
+import TrashMap from "./Heatmap"; // Adjust the import path based on your file structure
 
 function AdminDash() {
+  const navigate = useNavigate();
   const [reportFilter, setReportFilter] = useState("all");
   const [mapToggle, setMapToggle] = useState("heatmap");
+  const [dashboardStats, setDashboardStats] = useState({});
+  const [recentReports, setRecentReports] = useState([]);
+  const [fineDetails, setFineDetails] = useState([]);
+  const [topMembers, setTopMembers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // Mock data
-  const dashboardStats = {
-    reportsToday: 47,
-    needReview: 23,
-    resolvedToday: 31,
-    totalActiveUsers: 2847,
-  };
+  const token = localStorage.getItem("token");
 
-  const recentReports = [
-    {
-      id: "1",
-      title: "Overflowing waste bin at bus stop",
-      location: "MG Road, Kochi",
-      reportedBy: "Alex Johnson",
-      status: "review",
-      priority: "high",
-      date: "2 hours ago",
-    },
-    {
-      id: "2",
-      title: "Illegal dumping near residential area",
-      location: "Marine Drive, Kochi",
-      reportedBy: "Priya Sharma",
-      status: "pending",
-      priority: "high",
-      date: "4 hours ago",
-    },
-    {
-      id: "3",
-      title: "Broken waste container",
-      location: "Panampilly Nagar",
-      reportedBy: "Raj Kumar",
-      status: "resolved",
-      priority: "medium",
-      date: "6 hours ago",
-    },
-    {
-      id: "4",
-      title: "Street litter accumulation",
-      location: "Fort Kochi",
-      reportedBy: "Sarah Wilson",
-      status: "review",
-      priority: "low",
-      date: "8 hours ago",
-    },
-    {
-      id: "5",
-      title: "Damaged recycling bin",
-      location: "Edappally",
-      reportedBy: "Mohammed Ali",
-      status: "pending",
-      priority: "medium",
-      date: "1 day ago",
-    },
-  ];
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!token) {
+        setError("No token found. Please log in.");
+        setLoading(false);
+        return;
+      }
 
-  const fineDetails = [
-    {
-      id: "1",
-      violationType: "Illegal Dumping",
-      amount: 5000,
-      description: "Dumping waste in unauthorized areas",
-      issuedToday: 3,
-      totalCollected: 45000,
-    },
-    {
-      id: "2",
-      violationType: "Littering",
-      amount: 500,
-      description: "Throwing waste on streets/public places",
-      issuedToday: 12,
-      totalCollected: 28500,
-    },
-    {
-      id: "3",
-      violationType: "Improper Segregation",
-      amount: 1000,
-      description: "Not segregating waste properly",
-      issuedToday: 8,
-      totalCollected: 15000,
-    },
-    {
-      id: "4",
-      violationType: "Overflowing Private Bins",
-      amount: 2000,
-      description: "Not maintaining private waste containers",
-      issuedToday: 2,
-      totalCollected: 12000,
-    },
-  ];
+      try {
+        // Fetch dashboard stats
+        const statsResponse = await axios.get(
+          "https://192.168.82.139:5000/api/dashboard-stats",
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
+        console.log("Stats Response:", statsResponse.data);
+        setDashboardStats(statsResponse.data);
 
-  const topMembers = [
-    {
-      id: "1",
-      name: "Alex Johnson",
-      points: 1250,
-      reportsThisMonth: 28,
-      rank: 1,
-    },
-    {
-      id: "2",
-      name: "Priya Sharma",
-      points: 1180,
-      reportsThisMonth: 25,
-      rank: 2,
-    },
-    {
-      id: "3",
-      name: "Raj Kumar",
-      points: 1050,
-      reportsThisMonth: 22,
-      rank: 3,
-    },
-    {
-      id: "4",
-      name: "Sarah Wilson",
-      points: 980,
-      reportsThisMonth: 19,
-      rank: 4,
-    },
-    {
-      id: "5",
-      name: "Mohammed Ali",
-      points: 920,
-      reportsThisMonth: 17,
-      rank: 5,
-    },
-  ];
+        // Fetch reports
+        const reportsResponse = await axios.get(
+          `https://192.168.82.139:5000/api/reports${
+            reportFilter !== "all" ? `?status=${reportFilter}` : ""
+          }`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
+        console.log("Reports Response:", reportsResponse.data);
+        const transformedReports = reportsResponse.data.map((report) => ({
+          id: report._id,
+          title: report.title,
+          location:
+            report.location || `${report.latitude}, ${report.longitude}`,
+          reportedBy: report.user
+            ? report.user.name || report.user.email || "Unknown User"
+            : "Unknown User",
+          status: report.status.toLowerCase(),
+          priority: report.severity.toLowerCase(),
+          date: new Date(report.createdAt).toLocaleDateString(),
+        }));
+        setRecentReports(transformedReports);
+
+        // Fetch fine details
+        const finesResponse = await axios.get(
+          "https://192.168.82.139:5000/api/fines",
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
+        console.log("Fines Response:", finesResponse.data);
+        setFineDetails(finesResponse.data);
+
+        // Fetch top members
+        const membersResponse = await axios.get(
+          "https://192.168.82.139:5000/api/top-members",
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
+        console.log("Members Response:", membersResponse.data);
+        setTopMembers(membersResponse.data);
+
+        setLoading(false);
+      } catch (err) {
+        console.error("Fetch Error:", err.response?.data || err.message);
+        setError(err.response?.data?.message || "Failed to fetch data");
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [token, reportFilter]);
 
   const getStatusIcon = (status) => {
     switch (status) {
       case "resolved":
         return <CheckCircle className="w-4 h-4 text-green-500" />;
-      case "review":
+      case "reported":
         return <AlertCircle className="w-4 h-4 text-blue-500" />;
       case "pending":
         return <Clock className="w-4 h-4 text-yellow-500" />;
@@ -177,7 +134,7 @@ function AdminDash() {
     switch (status) {
       case "resolved":
         return "bg-green-100 text-green-700";
-      case "review":
+      case "reported":
         return "bg-blue-100 text-blue-700";
       case "pending":
         return "bg-yellow-100 text-yellow-700";
@@ -214,14 +171,11 @@ function AdminDash() {
     }
   };
 
-  const filteredReports =
-    reportFilter === "all"
-      ? recentReports
-      : recentReports.filter((report) => report.status === reportFilter);
+  if (loading) return <div>Loading...</div>;
+  if (error) return <div className="text-red-500 text-center">{error}</div>;
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <div className="bg-white shadow-md border-b border-gray-200 px-4 py-3">
         <div className="max-w-7xl mx-auto flex flex-col gap-3">
           <div className="flex items-center gap-2">
@@ -233,7 +187,7 @@ function AdminDash() {
                 Welcome, Chairman
               </h1>
               <p className="text-xs text-gray-500">
-                Kochi Municipality - Waste Management
+                Thrissur Municipality - Waste Management
               </p>
             </div>
           </div>
@@ -252,7 +206,6 @@ function AdminDash() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 py-4 space-y-4">
-        {/* Stats Cards */}
         <div className="grid grid-cols-1 gap-3">
           <div className="bg-white rounded-lg p-3 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
             <div className="flex items-center gap-2">
@@ -261,13 +214,12 @@ function AdminDash() {
               </div>
               <div>
                 <p className="text-lg font-bold text-gray-800">
-                  {dashboardStats.reportsToday}
+                  {dashboardStats.reportsToday || 0}
                 </p>
                 <p className="text-xs text-gray-600">Reports Today</p>
               </div>
             </div>
           </div>
-
           <div className="bg-white rounded-lg p-3 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
             <div className="flex items-center gap-2">
               <div className="bg-yellow-100 p-2 rounded-md">
@@ -275,13 +227,12 @@ function AdminDash() {
               </div>
               <div>
                 <p className="text-lg font-bold text-gray-800">
-                  {dashboardStats.needReview}
+                  {dashboardStats.needReview || 0}
                 </p>
                 <p className="text-xs text-gray-600">Need Review</p>
               </div>
             </div>
           </div>
-
           <div className="bg-white rounded-lg p-3 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
             <div className="flex items-center gap-2">
               <div className="bg-green-100 p-2 rounded-md">
@@ -289,13 +240,12 @@ function AdminDash() {
               </div>
               <div>
                 <p className="text-lg font-bold text-gray-800">
-                  {dashboardStats.resolvedToday}
+                  {dashboardStats.resolvedToday || 0}
                 </p>
                 <p className="text-xs text-gray-600">Resolved Today</p>
               </div>
             </div>
           </div>
-
           <div className="bg-white rounded-lg p-3 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
             <div className="flex items-center gap-2">
               <div className="bg-purple-100 p-2 rounded-md">
@@ -303,7 +253,7 @@ function AdminDash() {
               </div>
               <div>
                 <p className="text-lg font-bold text-gray-800">
-                  {dashboardStats.totalActiveUsers.toLocaleString()}
+                  {(dashboardStats.totalActiveUsers || 0).toLocaleString()}
                 </p>
                 <p className="text-xs text-gray-600">Active Users</p>
               </div>
@@ -311,7 +261,6 @@ function AdminDash() {
           </div>
         </div>
 
-        {/* Recent Reports Section */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-4">
           <div className="flex flex-col gap-3 mb-4">
             <h2 className="text-lg font-semibold text-gray-800">
@@ -365,54 +314,58 @@ function AdminDash() {
               </button>
             </div>
           </div>
-
           <div className="space-y-2">
-            {filteredReports.map((report) => (
-              <div
-                key={report.id}
-                className="p-3 border border-gray-200 rounded-md hover:shadow-sm transition-shadow"
-              >
-                <div className="flex items-start gap-2">
-                  {getStatusIcon(report.status)}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-1 mb-1">
-                      <h3 className="font-medium text-sm text-gray-800 truncate">
-                        {report.title}
-                      </h3>
-                      <span
-                        className={`px-1.5 py-0.5 text-xs font-medium rounded-full ${getStatusColor(
-                          report.status
-                        )}`}
-                      >
-                        {report.status}
-                      </span>
-                      <span
-                        className={`px-1.5 py-0.5 text-xs font-medium rounded border ${getPriorityColor(
-                          report.priority
-                        )}`}
-                      >
-                        {report.priority}
-                      </span>
+            {recentReports.length ? (
+              recentReports.map((report) => (
+                <div
+                  key={report.id}
+                  className="p-3 border border-gray-200 rounded-md hover:shadow-sm transition-shadow"
+                >
+                  <div className="flex items-start gap-2">
+                    {getStatusIcon(report.status)}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-1 mb-1">
+                        <h3 className="font-medium text-sm text-gray-800 truncate">
+                          {report.title}
+                        </h3>
+                        <span
+                          className={`px-1.5 py-0.5 text-xs font-medium rounded-full ${getStatusColor(
+                            report.status
+                          )}`}
+                        >
+                          {report.status}
+                        </span>
+                        <span
+                          className={`px-1.5 py-0.5 text-xs font-medium rounded border ${getPriorityColor(
+                            report.priority
+                          )}`}
+                        >
+                          {report.priority}
+                        </span>
+                      </div>
+                      <div className="flex flex-col gap-1 text-xs text-gray-500">
+                        <span className="flex items-center gap-1">
+                          <MapPin className="w-3 h-3" /> {report.location}
+                        </span>
+                        <span>By: {report.reportedBy}</span>
+                        <span>{report.date}</span>
+                      </div>
                     </div>
-                    <div className="flex flex-col gap-1 text-xs text-gray-500">
-                      <span className="flex items-center gap-1">
-                        <MapPin className="w-3 h-3" />
-                        {report.location}
-                      </span>
-                      <span>By: {report.reportedBy}</span>
-                      <span>{report.date}</span>
-                    </div>
+                    <button
+                      onClick={() => navigate(`/admin/report/${report.id}`)}
+                      className="text-blue-600 hover:text-blue-700 p-1 rounded-md hover:bg-blue-50"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </button>
                   </div>
-                  <button className="text-blue-600 hover:text-blue-700 p-1 rounded-md hover:bg-blue-50">
-                    <Eye className="w-4 h-4" />
-                  </button>
                 </div>
-              </div>
-            ))}
+              ))
+            ) : (
+              <p className="text-gray-500 text-sm">No reports available</p>
+            )}
           </div>
         </div>
 
-        {/* Map Section */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-4">
           <div className="flex flex-col gap-3 mb-3">
             <h2 className="text-lg font-semibold text-gray-800">
@@ -427,8 +380,7 @@ function AdminDash() {
                     : "text-gray-600 hover:bg-gray-100"
                 }`}
               >
-                <Thermometer className="w-3 h-3" />
-                Heatmap
+                <Thermometer className="w-3 h-3" /> Heatmap
               </button>
               <button
                 onClick={() => setMapToggle("bins")}
@@ -438,27 +390,32 @@ function AdminDash() {
                     : "text-gray-600 hover:bg-gray-100"
                 }`}
               >
-                <Trash2 className="w-3 h-3" />
-                Bins
+                <Trash2 className="w-3 h-3" /> Bins
               </button>
             </div>
           </div>
-
-          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-md h-48 flex items-center justify-center border border-blue-100">
-            <div className="text-center">
-              <Map className="w-8 h-8 text-blue-400 mx-auto mb-2" />
-              <p className="text-blue-600 text-sm font-medium">
-                {mapToggle === "heatmap"
-                  ? "Waste Issue Heatmap"
-                  : "Dustbin Status"}
-              </p>
-              <p className="text-blue-500 text-xs mt-1">Real-time dashboard</p>
+          {mapToggle === "heatmap" ? (
+            <div className="rounded-md h-48 border border-blue-100">
+              <div className="rounded-lg h-48 sm:h-64 border border-emerald-100 overflow-hidden">
+                <TrashMap className="w-full h-full" />
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-md h-48 flex items-center justify-center border border-blue-100">
+              <div className="text-center">
+                <Map className="w-8 h-8 text-blue-400 mx-auto mb-2" />
+                <p className="text-blue-600 text-sm font-medium">
+                  Dustbin Status
+                </p>
+                <p className="text-blue-500 text-xs mt-1">
+                  Real-time dashboard
+                </p>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="grid gap-4">
-          {/* Fine Details */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-4">
             <div className="flex items-center gap-2 mb-4">
               <DollarSign className="w-5 h-5 text-green-600" />
@@ -467,33 +424,36 @@ function AdminDash() {
               </h2>
             </div>
             <div className="space-y-2">
-              {fineDetails.map((fine) => (
-                <div key={fine.id} className="p-3 bg-gray-50 rounded-md">
-                  <div className="flex items-start justify-between mb-1">
-                    <div>
-                      <h3 className="font-medium text-sm text-gray-800">
-                        {fine.violationType}
-                      </h3>
-                      <p className="text-xs text-gray-600 mt-1">
-                        {fine.description}
-                      </p>
+              {fineDetails.length ? (
+                fineDetails.map((fine) => (
+                  <div key={fine.id} className="p-3 bg-gray-50 rounded-md">
+                    <div className="flex items-start justify-between mb-1">
+                      <div>
+                        <h3 className="font-medium text-sm text-gray-800">
+                          {fine.violationType}
+                        </h3>
+                        <p className="text-xs text-gray-600 mt-1">
+                          {fine.description}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-green-600 text-sm">
+                          ₹{fine.amount.toLocaleString()}
+                        </p>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="font-bold text-green-600 text-sm">
-                        ₹{fine.amount.toLocaleString()}
-                      </p>
+                    <div className="flex items-center justify-between text-xs text-gray-500">
+                      <span>Issued: {fine.issuedToday}</span>
+                      <span>₹{fine.totalCollected.toLocaleString()}</span>
                     </div>
                   </div>
-                  <div className="flex items-center justify-between text-xs text-gray-500">
-                    <span>Issued: {fine.issuedToday}</span>
-                    <span>₹{fine.totalCollected.toLocaleString()}</span>
-                  </div>
-                </div>
-              ))}
+                ))
+              ) : (
+                <p className="text-gray-500 text-sm">No fines available</p>
+              )}
             </div>
           </div>
 
-          {/* Top Members */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-4">
             <div className="flex items-center gap-2 mb-4">
               <Trophy className="w-5 h-5 text-yellow-600" />
@@ -502,38 +462,43 @@ function AdminDash() {
               </h2>
             </div>
             <div className="space-y-2">
-              {topMembers.map((member) => (
-                <div
-                  key={member.id}
-                  className="flex items-center gap-2 p-3 bg-gray-50 rounded-md hover:bg-gray-100 transition-colors"
-                >
-                  <div className="flex items-center gap-2">
-                    {getRankIcon(member.rank)}
-                    <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full flex items-center justify-center text-white text-sm font-bold">
-                      {member.name.charAt(0)}
+              {topMembers.length ? (
+                topMembers.map((member) => (
+                  <div
+                    key={member.id}
+                    className="flex items-center gap-2 p-3 bg-gray-50 rounded-md hover:bg-gray-100 transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      {getRankIcon(member.rank)}
+                      <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full flex items-center justify-center text-white text-sm font-bold">
+                        {member.name.charAt(0)}
+                      </div>
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-medium text-sm text-gray-800">
+                        {member.name}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {member.reportsThisMonth} reports
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold text-blue-600 text-sm">
+                        {member.points} pts
+                      </p>
+                      <p className="text-xs text-gray-500">#{member.rank}</p>
                     </div>
                   </div>
-                  <div className="flex-1">
-                    <p className="font-medium text-sm text-gray-800">
-                      {member.name}
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      {member.reportsThisMonth} reports
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-bold text-blue-600 text-sm">
-                      {member.points} pts
-                    </p>
-                    <p className="text-xs text-gray-500">#{member.rank}</p>
-                  </div>
-                </div>
-              ))}
+                ))
+              ) : (
+                <p className="text-gray-500 text-sm">
+                  No contributors available
+                </p>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Additional Analytics Section */}
         <div className="grid gap-4">
           <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-4">
             <div className="flex items-center gap-2 mb-3">
@@ -557,7 +522,6 @@ function AdminDash() {
               </div>
             </div>
           </div>
-
           <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-4">
             <div className="flex items-center gap-2 mb-3">
               <Target className="w-5 h-5 text-red-600" />
@@ -567,7 +531,7 @@ function AdminDash() {
             </div>
             <div className="space-y-2">
               <div className="text-xs">
-                <span className="text-gray-600">Marine Drive</span>
+                <span className="text-gray-600">Wadakkańcherry</span>
                 <div className="w-full bg-gray-200 rounded-full h-1.5 mt-1">
                   <div
                     className="bg-red-500 h-1.5 rounded-full"
@@ -576,7 +540,7 @@ function AdminDash() {
                 </div>
               </div>
               <div className="text-xs">
-                <span className="text-gray-600">MG Road</span>
+                <span className="text-gray-600">cheruthuruthy</span>
                 <div className="w-full bg-gray-200 rounded-full h-1.5 mt-1">
                   <div
                     className="bg-yellow-500 h-1.5 rounded-full"
@@ -585,7 +549,7 @@ function AdminDash() {
                 </div>
               </div>
               <div className="text-xs">
-                <span className="text-gray-600">Fort Kochi</span>
+                <span className="text-gray-600">Thrissur</span>
                 <div className="w-full bg-gray-200 rounded-full h-1.5 mt-1">
                   <div
                     className="bg-green-500 h-1.5 rounded-full"
@@ -595,7 +559,6 @@ function AdminDash() {
               </div>
             </div>
           </div>
-
           <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-4">
             <div className="flex items-center gap-2 mb-3">
               <BarChart3 className="w-5 h-5 text-blue-600" />
