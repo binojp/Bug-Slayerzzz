@@ -441,7 +441,7 @@ function UserDash() {
                 issues? Report them to help keep our city clean and earn points!
               </p>
               <button
-                onClick={() => setIsReportModalOpen(true)}
+                onClick={() => navigate("/report")}
                 className="bg-gradient-to-r from-orange-500 to-red-500 text-white px-5 py-2 sm:px-6 sm:py-3 rounded-lg font-medium hover:from-orange-600 hover:to-red-600 transition-all duration-200 transform hover:scale-105 shadow-md text-sm sm:text-base"
               >
                 Report an Issue

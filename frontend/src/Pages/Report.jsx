@@ -1,4 +1,3 @@
-// src/UploadPage.jsx
 import React, { useState, useRef, useEffect } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
@@ -16,6 +15,8 @@ import {
   MapPin,
   X,
   LoaderCircle,
+  ShieldCheck,
+  ShieldAlert,
 } from "lucide-react";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
@@ -23,14 +24,22 @@ import L from "leaflet";
 // Fix Leaflet marker icon issue
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
-  iconRetinaUrl:
-    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
   iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
   shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
 });
 
-// Media Preview
-const MediaPreview = ({ file, onRemove }) => {
+// Helper function to convert a file to a base64 string
+const fileToBase64 = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result.split(",")[1]);
+    reader.onerror = (error) => reject(error);
+  });
+
+// Media Preview with Analysis Status
+const MediaPreview = ({ file, onRemove, analysisStatus }) => {
   const fileType = file.type.split("/")[0];
   return (
     <div className="relative w-24 h-24 rounded-lg overflow-hidden group border border-gray-200">
@@ -46,6 +55,19 @@ const MediaPreview = ({ file, onRemove }) => {
           className="w-full h-full object-cover"
         />
       )}
+      {analysisStatus !== "idle" && (
+        <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white font-bold">
+          {analysisStatus === "analyzing" && (
+            <LoaderCircle className="animate-spin" />
+          )}
+          {analysisStatus === "verified" && (
+            <ShieldCheck className="text-green-400" />
+          )}
+          {analysisStatus === "invalid" && (
+            <ShieldAlert className="text-red-400" />
+          )}
+        </div>
+      )}
       <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all duration-300 flex items-center justify-center">
         <button
           onClick={onRemove}
@@ -59,13 +81,14 @@ const MediaPreview = ({ file, onRemove }) => {
 };
 
 // File Uploader
-const FileUploader = ({ files, setFiles, maxFiles, mode }) => {
+const FileUploader = ({ files, setFiles, maxFiles, mode, onFilesSelected, analysisStatus }) => {
   const fileInputRef = useRef(null);
 
   const handleFileChange = (event) => {
     const newFiles = Array.from(event.target.files);
     if (files.length + newFiles.length <= maxFiles) {
       setFiles((prevFiles) => [...prevFiles, ...newFiles]);
+      onFilesSelected(newFiles);
     } else {
       alert(`You can only upload a maximum of ${maxFiles} file(s).`);
     }
@@ -75,6 +98,9 @@ const FileUploader = ({ files, setFiles, maxFiles, mode }) => {
     setFiles((prevFiles) =>
       prevFiles.filter((_, index) => index !== indexToRemove)
     );
+    if (files.length - 1 === 0) {
+      onFilesSelected([]);
+    }
   };
 
   return (
@@ -100,13 +126,16 @@ const FileUploader = ({ files, setFiles, maxFiles, mode }) => {
       />
       {files.length > 0 && (
         <div className="mt-4">
-          <h3 className="font-semibold text-gray-700 mb-2">Selected Files:</h3>
+          <h3 className="font-semibold text-gray-700 mb-2">
+            {mode === "report" ? "Verification Status:" : "Selected Files:"}
+          </h3>
           <div className="flex flex-wrap gap-4">
             {files.map((file, index) => (
               <MediaPreview
                 key={index}
                 file={file}
                 onRemove={() => handleRemoveFile(index)}
+                analysisStatus={mode === "report" ? analysisStatus : "idle"}
               />
             ))}
           </div>
@@ -128,7 +157,6 @@ const LocationPicker = ({ setLocation, setLocationName, setLocationError }) => {
         setLocation({ lat, lon: lng });
         setLocationError("");
         map.setView([lat, lng], 13);
-        // Reverse geocode
         axios
           .get(
             `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`
@@ -169,6 +197,8 @@ export default function UploadPage() {
   const [mode, setMode] = useState("report");
   const [reportFiles, setReportFiles] = useState([]);
   const [cleanupFiles, setCleanupFiles] = useState([]);
+  const [analysisStatus, setAnalysisStatus] = useState("idle"); // idle, analyzing, verified, invalid
+  const [analysisError, setAnalysisError] = useState("");
   const [location, setLocation] = useState(null);
   const [locationName, setLocationName] = useState("");
   const [isTracking, setIsTracking] = useState(false);
@@ -177,7 +207,7 @@ export default function UploadPage() {
   const [formData, setFormData] = useState({
     title: "",
     description: "",
-    severity: "Low", // Default for report
+    severity: "Low",
   });
   const [errors, setErrors] = useState({});
   const [imageUrl, setImageUrl] = useState(null);
@@ -185,6 +215,104 @@ export default function UploadPage() {
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const handleFileSelection = async (selectedFiles) => {
+    if (mode !== "report") {
+      setAnalysisStatus("idle");
+      setAnalysisError("");
+      return;
+    }
+
+    const files = mode === "report" ? reportFiles : cleanupFiles;
+    if (files.length + selectedFiles.length > (mode === "report" ? 1 : 2)) {
+      alert(`You can only upload a maximum of ${mode === "report" ? 1 : 2} file(s).`);
+      return;
+    }
+
+    setAnalysisStatus("analyzing");
+    setAnalysisError("");
+
+    try {
+      const firstFile = selectedFiles[0];
+      const base64Data = await fileToBase64(firstFile);
+
+      const prompt =
+        "Is this an image of trash, waste, litter, or garbage? Answer with a simple JSON object: {\"is_trash\": boolean}.";
+
+      const payload = {
+        contents: [
+          {
+            role: "user",
+            parts: [
+              { text: prompt },
+              { inlineData: { mimeType: firstFile.type, data: base64Data } },
+            ],
+          },
+        ],
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: "OBJECT",
+            properties: {
+              is_trash: { type: "BOOLEAN" },
+            },
+          },
+        },
+      };
+
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "AIzaSyCjbRIxZPp_tpBnS-v9glJFCYoyL-CGbzs";
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+
+      const response = await fetch(apiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.json();
+        throw new Error(`API request failed: ${errorBody.error.message}`);
+      }
+
+      const result = await response.json();
+
+      if (
+        !result.candidates ||
+        result.candidates.length === 0 ||
+        !result.candidates[0].content ||
+        !result.candidates[0].content.parts
+      ) {
+        if (result.candidates && result.candidates[0].finishReason === "SAFETY") {
+          throw new Error("Image was blocked for safety reasons.");
+        }
+        throw new Error("API returned an empty or invalid response.");
+      }
+
+      const jsonText = result.candidates[0].content.parts[0].text;
+      const parsedResult = JSON.parse(jsonText);
+
+      if (parsedResult.is_trash) {
+        setAnalysisStatus("verified");
+      } else {
+        setAnalysisStatus("invalid");
+        setAnalysisError("This doesn't look like trash. Please upload a different photo.");
+        setTimeout(() => {
+          setReportFiles([]);
+          setAnalysisStatus("idle");
+          setAnalysisError("");
+        }, 3000);
+      }
+    } catch (error) {
+      console.error("Gemini verification error:", error);
+      setAnalysisStatus("invalid");
+      setAnalysisError(`Verification failed: ${error.message}`);
+      setTimeout(() => {
+        setReportFiles([]);
+        setAnalysisStatus("idle");
+        setAnalysisError("");
+      }, 3000);
+    }
   };
 
   const validate = () => {
@@ -201,6 +329,12 @@ export default function UploadPage() {
     const files = mode === "report" ? reportFiles : cleanupFiles;
     if (files.length === 0) {
       newErrors.media = "Please upload at least one file.";
+    }
+    if (mode === "report" && analysisStatus !== "verified") {
+      newErrors.media = "Please upload a verified trash image.";
+    }
+    if (!location) {
+      newErrors.location = "Please provide a location.";
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -225,7 +359,6 @@ export default function UploadPage() {
         const { latitude, longitude } = position.coords;
         setLocation({ lat: latitude, lon: longitude });
         setIsTracking(false);
-        // Reverse geocode
         axios
           .get(
             `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`
@@ -279,6 +412,7 @@ export default function UploadPage() {
 
     try {
       const token = localStorage.getItem("token");
+      console.log("Token:", token); // Debug token
       if (!token) {
         setErrors({ server: "Please log in to submit a report." });
         navigate("/login");
@@ -296,7 +430,7 @@ export default function UploadPage() {
         }
       );
 
-      setImageUrl(response.data.mediaUrls[0]);
+      setImageUrl(response.data.report.mediaUrls[0]);
       alert("Report submitted successfully!");
       setFormData({ title: "", description: "", severity: "Low" });
       setReportFiles([]);
@@ -304,12 +438,15 @@ export default function UploadPage() {
       setLocation(null);
       setLocationName("");
       setShowMap(false);
+      setAnalysisStatus("idle");
+      setAnalysisError("");
     } catch (err) {
+      console.error("Submission error:", err); // Debug error
       setErrors({
         server:
           err.response?.data?.message ||
           err.response?.data?.errors?.map((e) => e.msg).join(", ") ||
-          "Report submission failed. Please try again.",
+          "Report submission failed. Please check your network and try again.",
       });
     }
   };
@@ -323,6 +460,8 @@ export default function UploadPage() {
     setShowMap(false);
     setLocation(null);
     setLocationName("");
+    setAnalysisStatus("idle");
+    setAnalysisError("");
   }, [mode]);
 
   return (
@@ -422,6 +561,8 @@ export default function UploadPage() {
                 setFiles={setReportFiles}
                 maxFiles={1}
                 mode="report"
+                onFilesSelected={handleFileSelection}
+                analysisStatus={analysisStatus}
               />
             ) : (
               <FileUploader
@@ -429,10 +570,15 @@ export default function UploadPage() {
                 setFiles={setCleanupFiles}
                 maxFiles={2}
                 mode="cleanup"
+                onFilesSelected={handleFileSelection}
+                analysisStatus={analysisStatus}
               />
             )}
             {errors.media && (
               <p className="text-sm text-red-500 mt-1">{errors.media}</p>
+            )}
+            {mode === "report" && analysisError && (
+              <p className="text-sm text-red-500 mt-1">{analysisError}</p>
             )}
           </div>
 
@@ -478,6 +624,9 @@ export default function UploadPage() {
                   setLocationError={setLocationError}
                 />
               </div>
+            )}
+            {errors.location && (
+              <p className="text-sm text-red-500 mt-1">{errors.location}</p>
             )}
           </div>
 

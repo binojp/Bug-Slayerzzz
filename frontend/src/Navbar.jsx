@@ -5,6 +5,7 @@ import { useState } from "react";
 const navLinks = [
   { href: "/heatmap", label: "Heatmap" },
   { href: "/report", label: "Report" },
+  { href: "/rewards", label: "Rewards" },
   { href: "/leaderboard", label: "Leaderboard" },
 ];
 

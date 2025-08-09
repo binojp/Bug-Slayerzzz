@@ -1,64 +1,43 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
+import axios from "axios";
 
-const initialLeaderboardData = [
-  {
-    rank: 1,
-    name: "EcoWarrior22",
-    points: 4500,
-    avatar: "https://i.pravatar.cc/150?img=1",
-  },
-  {
-    rank: 2,
-    name: "GreenThumb",
-    points: 4150,
-    avatar: "https://i.pravatar.cc/150?img=2",
-  },
-  {
-    rank: 3,
-    name: "CaptainPlanet",
-    points: 3800,
-    avatar: "https://i.pravatar.cc/150?img=3",
-  },
-  {
-    rank: 4,
-    name: "Anjali S.",
-    points: 3200,
-    avatar: "https://i.pravatar.cc/150?img=4",
-  },
-  {
-    rank: 5,
-    name: "RecycleRanger",
-    points: 2850,
-    avatar: "https://i.pravatar.cc/150?img=5",
-  },
-  {
-    rank: 6,
-    name: "TrashTagPro",
-    points: 2500,
-    avatar: "https://i.pravatar.cc/150?img=6",
-  },
-  {
-    rank: 7,
-    name: "You (DevUser)",
-    points: 2100,
-    avatar: "https://i.pravatar.cc/150?img=7",
-  },
-  {
-    rank: 8,
-    name: "EnviroHero",
-    points: 1800,
-    avatar: "https://i.pravatar.cc/150?img=8",
-  },
-];
+export default function Leaderboard() {
+  const [topMembers, setTopMembers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const token = localStorage.getItem("token");
 
-const currentUser = { name: "You (DevUser)", points: 2100, rank: 7 };
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!token) {
+        setError("No token found. Please log in.");
+        setLoading(false);
+        return;
+      }
 
-const RewardsPage = () => {
-  const [leaders, setLeaders] = React.useState(initialLeaderboardData);
+      try {
+        const membersResponse = await axios.get(
+          "https://192.168.82.139:5000/api/top-members",
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
+        setTopMembers(membersResponse.data);
+        setLoading(false);
+      } catch (err) {
+        console.error("Fetch Error:", err.response?.data || err.message);
+        setError(err.response?.data?.message || "Failed to fetch data");
+        setLoading(false);
+      }
+    };
 
-  React.useEffect(() => {
+    fetchData();
+  }, [token]);
+
+  // Simulate live updates
+  useEffect(() => {
     const interval = setInterval(() => {
-      setLeaders((prev) => {
+      setTopMembers((prev) => {
         const updated = JSON.parse(JSON.stringify(prev));
         const randomIndex = Math.floor(
           3 + Math.random() * (updated.length - 3)
@@ -79,8 +58,17 @@ const RewardsPage = () => {
     return rank;
   };
 
-  const myLiveStats =
-    leaders.find((user) => user.name === currentUser.name) || currentUser;
+  const currentUser = topMembers.find(
+    (member) => member.name === "You (DevUser)"
+  ) || {
+    name: "You (DevUser)",
+    points: 2100,
+    rank: 7,
+  };
+
+  if (loading)
+    return <div className="text-center text-gray-600">Loading...</div>;
+  if (error) return <div className="text-red-500 text-center">{error}</div>;
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8 font-sans">
@@ -91,20 +79,20 @@ const RewardsPage = () => {
         See who's making the biggest impact this month in our community!
       </p>
 
-      {/* Your Stats */}
+      {/* Current User Stats */}
       <div className="bg-white rounded-lg shadow p-6 flex flex-col sm:flex-row justify-around gap-6 mb-8">
         <div className="text-center">
           <span className="block text-sm text-gray-500 mb-1">
             Your Monthly Points
           </span>
           <span className="text-2xl font-bold text-green-700">
-            {myLiveStats.points.toLocaleString()}
+            {currentUser.points.toLocaleString()}
           </span>
         </div>
         <div className="text-center">
           <span className="block text-sm text-gray-500 mb-1">Your Rank</span>
           <span className="text-2xl font-bold text-green-700">
-            #{myLiveStats.rank}
+            #{currentUser.rank}
           </span>
         </div>
       </div>
@@ -122,32 +110,39 @@ const RewardsPage = () => {
 
       {/* Leaderboard List */}
       <div className="bg-white rounded-lg shadow divide-y divide-gray-100">
-        {leaders.map((user) => (
-          <div
-            key={user.name}
-            className={`flex items-center p-4 transition ${
-              user.name === currentUser.name
-                ? "bg-green-50 border-l-4 border-green-500"
-                : ""
-            }`}
-          >
-            <div className="w-10 text-center font-bold text-gray-700">
-              {getRankMedal(user.rank)}
+        {topMembers.length ? (
+          topMembers.map((member) => (
+            <div
+              key={member.id}
+              className={`flex items-center p-4 transition ${
+                member.name === currentUser.name
+                  ? "bg-green-50 border-l-4 border-green-500"
+                  : ""
+              }`}
+            >
+              <div className="w-10 text-center font-bold text-gray-700">
+                {getRankMedal(member.rank)}
+              </div>
+              <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full flex items-center justify-center text-white text-sm font-bold mr-4">
+                {member.name.charAt(0)}
+              </div>
+              <div className="flex-1">
+                <p className="font-medium text-sm text-gray-800">
+                  {member.name}
+                </p>
+                <p className="text-xs text-gray-500">
+                  {member.reportsThisMonth} reports
+                </p>
+              </div>
+              <div className="text-green-700 font-bold">
+                {member.points.toLocaleString()} pts
+              </div>
             </div>
-            <img
-              src={user.avatar}
-              alt={user.name}
-              className="w-10 h-10 rounded-full mr-4"
-            />
-            <div className="flex-1 font-medium text-gray-800">{user.name}</div>
-            <div className="text-green-700 font-bold">
-              {user.points.toLocaleString()} pts
-            </div>
-          </div>
-        ))}
+          ))
+        ) : (
+          <p className="text-gray-500 text-sm p-4">No contributors available</p>
+        )}
       </div>
     </div>
   );
-};
-
-export default RewardsPage;
+}

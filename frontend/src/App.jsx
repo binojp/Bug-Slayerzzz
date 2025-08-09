@@ -10,6 +10,7 @@ import AdminDash from "./Pages/AdminDash";
 import AddAdmin from "./Pages/AddAdmin";
 import ReportDetails from "./Pages/ReportDetails.jsx"
 import UserReportDetails from "./Pages/UserReportDetails.jsx";
+import RewardsPage from "./Pages/Rewards.jsx";
 export default function App() {
   return (
     <BrowserRouter>
@@ -26,6 +27,7 @@ export default function App() {
         <Route path="/admin/dashboard" element={<AdminDash />} />
         <Route path="/admin/report/:id" element={<ReportDetails />} />
         <Route path="/user/report/:id" element={<UserReportDetails />} />
+        <Route path="/rewards" element={<RewardsPage />} />
       </Routes>
     </BrowserRouter>
   );
