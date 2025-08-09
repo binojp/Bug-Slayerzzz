@@ -27,15 +27,20 @@ export default function LoginForm() {
     e.preventDefault();
     if (!validate()) return;
 
+    console.log("Sending login request with:", formData); // Debug payload
     try {
       const response = await axios.post(
         `${import.meta.env.VITE_API_URL}/api/login`,
         {
           email: formData.email,
           password: formData.password,
+        },
+        {
+          headers: { "Content-Type": "application/json" },
         }
       );
 
+      console.log("Login response:", response.data); // Debug response
       const { token, user } = response.data;
       localStorage.setItem("token", token);
       localStorage.setItem("user", JSON.stringify(user));
@@ -46,9 +51,11 @@ export default function LoginForm() {
         navigate("/user/dashboard");
       }
     } catch (err) {
+      console.error("Login error:", err.response?.data); // Debug error
       setErrors({
         server:
-          err.response?.data?.message || "Login failed. Please try again.",
+          err.response?.data?.message ||
+          "Login failed. Invalid email or password.",
       });
     }
   };
