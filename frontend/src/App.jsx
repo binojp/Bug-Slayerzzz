@@ -2,9 +2,12 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Login from "./Pages/Login";
 import Register from "./Pages/Register";
 import Heatmap from "./Pages/Heatmap";
-import UploadIMG from "./Pages/UploadImg";
+import UploadIMG from "./Pages/Report";
 import Leaderboard from "./Pages/Leaderboard";
 import Navbar from "./Navbar";
+import UserDash from "./Pages/UserDash";
+import AdminDash from "./Pages/AdminDash";
+import AddAdmin from "./Pages/AddAdmin";
 export default function App() {
   return (
     <BrowserRouter>
@@ -15,6 +18,9 @@ export default function App() {
         <Route path="/heatmap" element={<Heatmap />} />
         <Route path="/uploadIMG" element={<UploadIMG />} />
         <Route path="/leaderboard" element={<Leaderboard />} />
+        <Route path="/user/dashboard" element={<UserDash />} />
+        <Route path="/admin/dashboard" element={<AdminDash />} />
+        <Route path="/add" element={<AddAdmin />} />
       </Routes>
     </BrowserRouter>
   );
