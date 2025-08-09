@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect } from 'react';
+import axios from 'axios'; // Import axios for API calls
 import {
   Trash2,
   Camera,
@@ -6,15 +7,26 @@ import {
   MapPin,
   X,
   LoaderCircle,
-} from "lucide-react";
+  ShieldCheck,
+  ShieldAlert,
+  Sparkles,
+} from 'lucide-react';
 
-// Media Preview
-const MediaPreview = ({ file, onRemove }) => {
-  const fileType = file.type.split("/")[0];
+// Helper function to convert a file to a base64 string
+const fileToBase64 = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result.split(',')[1]); // Get only the base64 part
+    reader.onerror = (error) => reject(error);
+});
+
+// Media Preview with Analysis Status
+const MediaPreview = ({ file, onRemove, analysisStatus }) => {
+  const fileType = file.type.split('/')[0];
 
   return (
     <div className="relative w-24 h-24 rounded-lg overflow-hidden group border border-gray-200">
-      {fileType === "image" ? (
+      {fileType === 'image' ? (
         <img
           src={URL.createObjectURL(file)}
           alt={file.name}
@@ -26,35 +38,29 @@ const MediaPreview = ({ file, onRemove }) => {
           className="w-full h-full object-cover"
         />
       )}
-      <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all duration-300 flex items-center justify-center">
-        <button
-          onClick={onRemove}
-          className="p-2 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transform scale-50 group-hover:scale-100 transition-all duration-300"
-        >
-          <X size={16} />
-        </button>
+      {/* Analysis Overlay */}
+      <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white font-bold">
+        {analysisStatus === 'analyzing' && <LoaderCircle className="animate-spin" />}
+        {analysisStatus === 'verified' && <ShieldCheck className="text-green-400" />}
+        {analysisStatus === 'invalid' && <ShieldAlert className="text-red-400" />}
       </div>
+      <button
+        onClick={onRemove}
+        className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+      >
+        <X size={12} />
+      </button>
     </div>
   );
 };
 
 // File Uploader
-const FileUploader = ({ files, setFiles, maxFiles, mode }) => {
+const FileUploader = ({ onFilesSelected, maxFiles, mode }) => {
   const fileInputRef = useRef(null);
 
   const handleFileChange = (event) => {
     const newFiles = Array.from(event.target.files);
-    if (files.length + newFiles.length <= maxFiles) {
-      setFiles((prevFiles) => [...prevFiles, ...newFiles]);
-    } else {
-      alert(`You can only upload a maximum of ${maxFiles} file(s).`);
-    }
-  };
-
-  const handleRemoveFile = (indexToRemove) => {
-    setFiles((prevFiles) =>
-      prevFiles.filter((_, index) => index !== indexToRemove)
-    );
+    onFilesSelected(newFiles);
   };
 
   return (
@@ -66,7 +72,7 @@ const FileUploader = ({ files, setFiles, maxFiles, mode }) => {
         <UploadCloud size={40} className="mb-2" />
         <p className="font-semibold">Tap to upload media</p>
         <p className="text-xs text-emerald-500">
-          {mode === "report" ? "1 Photo or Video" : "Up to 2 Photos or Videos"}
+          {mode === 'report' ? '1 Photo or Video' : 'Up to 2 Photos or Videos'}
         </p>
       </div>
       <input
@@ -78,43 +84,114 @@ const FileUploader = ({ files, setFiles, maxFiles, mode }) => {
         accept="image/*,video/*"
         capture="environment"
       />
-      {files.length > 0 && (
-        <div className="mt-4">
-          <h3 className="font-semibold text-gray-700 mb-2">Selected Files:</h3>
-          <div className="flex flex-wrap gap-4">
-            {files.map((file, index) => (
-              <MediaPreview
-                key={index}
-                file={file}
-                onRemove={() => handleRemoveFile(index)}
-              />
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 };
 
-export default function UploadPage() {
-  const [mode, setMode] = useState("report");
-  const [reportFiles, setReportFiles] = useState([]);
-  const [cleanupFiles, setCleanupFiles] = useState([]);
+export default function UploadImg() {
+  const [mode, setMode] = useState('report');
+  const [files, setFiles] = useState([]);
+  const [analysisStatus, setAnalysisStatus] = useState('idle'); // idle, analyzing, verified, invalid
+  const [analysisError, setAnalysisError] = useState('');
   const [location, setLocation] = useState(null);
   const [isTracking, setIsTracking] = useState(false);
-  const [locationError, setLocationError] = useState("");
+  const [locationError, setLocationError] = useState('');
 
-  const handleTrackLocation = () => {
-    setIsTracking(true);
-    setLocationError("");
-    setLocation(null);
+  const maxFiles = mode === 'report' ? 1 : 2;
 
-    if (!navigator.geolocation) {
-      setLocationError("Geolocation is not supported by your browser.");
-      setIsTracking(false);
+  const handleFileSelection = async (selectedFiles) => {
+    if (files.length + selectedFiles.length > maxFiles) {
+      alert(`You can only upload a maximum of ${maxFiles} file(s).`);
       return;
     }
 
+    const newFiles = [...files, ...selectedFiles];
+    setFiles(newFiles);
+    setAnalysisStatus('analyzing');
+    setAnalysisError('');
+
+    // --- Gemini API Call for Garbage Detection ---
+    try {
+      const firstFile = newFiles[0];
+      const base64Data = await fileToBase64(firstFile);
+      
+      const prompt = "Is this an image of trash, waste, litter, or garbage? Answer with a simple JSON object: {\"is_trash\": boolean}.";
+      
+      const payload = {
+        contents: [
+          {
+            role: "user",
+            parts: [
+              { text: prompt },
+              { inlineData: { mimeType: firstFile.type, data: base64Data } }
+            ]
+          }
+        ],
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: "OBJECT",
+            properties: {
+              is_trash: { type: "BOOLEAN" },
+            },
+          },
+        },
+      };
+
+      const apiKey = "AIzaSyCjbRIxZPp_tpBnS-v9glJFCYoyL-CGbzs";
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.json();
+        throw new Error(`API request failed: ${errorBody.error.message}`);
+      }
+
+      const result = await response.json();
+      
+      if (!result.candidates || result.candidates.length === 0 || !result.candidates[0].content || !result.candidates[0].content.parts) {
+          console.error("Invalid API response:", result);
+          if (result.candidates && result.candidates[0].finishReason === 'SAFETY') {
+              throw new Error("Image was blocked for safety reasons.");
+          }
+          throw new Error("API returned an empty or invalid response.");
+      }
+
+      const jsonText = result.candidates[0].content.parts[0].text;
+      const parsedResult = JSON.parse(jsonText);
+
+      if (parsedResult.is_trash) {
+        setAnalysisStatus('verified');
+      } else {
+        setAnalysisStatus('invalid');
+        setAnalysisError("This doesn't look like trash. Please upload a different photo.");
+        setTimeout(() => setFiles([]), 3000);
+      }
+    } catch (error) {
+      console.error("Gemini verification error:", error);
+      setAnalysisStatus('invalid');
+      setAnalysisError(`Verification failed: ${error.message}`);
+      setTimeout(() => setFiles([]), 3000);
+    }
+  };
+
+  const handleRemoveFile = (indexToRemove) => {
+    setFiles((prevFiles) => prevFiles.filter((_, index) => index !== indexToRemove));
+    if (files.length - 1 === 0) {
+      setAnalysisStatus('idle');
+      setAnalysisError('');
+    }
+  };
+
+  const handleTrackLocation = () => {
+    setIsTracking(true);
+    setLocationError('');
+    setLocation(null);
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const { latitude, longitude } = position.coords;
@@ -128,11 +205,22 @@ export default function UploadPage() {
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   };
+  
+  const handleSubmitReport = () => {
+      console.log("Submitting verified report:", { files, location });
+      alert("Report submitted successfully!");
+      setFiles([]);
+      setLocation(null);
+      setAnalysisStatus('idle');
+  }
 
   useEffect(() => {
-    setReportFiles([]);
-    setCleanupFiles([]);
+    setFiles([]);
+    setAnalysisStatus('idle');
+    setAnalysisError('');
   }, [mode]);
+  
+  const isSubmittable = analysisStatus === 'verified' && location !== null;
 
   return (
     <div className="bg-emerald-50 min-h-screen text-gray-800 font-sans flex flex-col items-center p-4 sm:p-6">
@@ -141,81 +229,67 @@ export default function UploadPage() {
           Make a Report
         </h1>
         <p className="text-emerald-600 text-center mb-8">
-          Choose your report type and upload media.
+          Upload a photo of waste to earn points.
         </p>
 
         <div className="flex w-full bg-emerald-100 rounded-full p-1.5 shadow-inner">
           <button
-            onClick={() => setMode("report")}
-            className={`w-1/2 py-3 rounded-full text-center font-semibold transition-all duration-300 flex items-center justify-center gap-2 ${
-              mode === "report"
-                ? "bg-emerald-600 text-white shadow-md ring-2 ring-emerald-400"
-                : "text-emerald-600 hover:bg-emerald-200"
-            }`}
+            onClick={() => setMode('report')}
+            className={`w-1/2 py-3 rounded-full font-semibold transition-all duration-300 flex items-center justify-center gap-2 ${mode === 'report' ? 'bg-emerald-600 text-white shadow-md' : 'text-emerald-600 hover:bg-emerald-200'}`}
           >
-            <Trash2 size={20} />
-            <span>Report Waste</span>
+            <Trash2 size={20} /><span>Report Waste</span>
           </button>
           <button
-            onClick={() => setMode("cleanup")}
-            className={`w-1/2 py-3 rounded-full text-center font-semibold transition-all duration-300 flex items-center justify-center gap-2 ${
-              mode === "cleanup"
-                ? "bg-emerald-600 text-white shadow-md ring-2 ring-emerald-400"
-                : "text-emerald-600 hover:bg-emerald-200"
-            }`}
+            onClick={() => setMode('cleanup')}
+            className={`w-1/2 py-3 rounded-full font-semibold transition-all duration-300 flex items-center justify-center gap-2 ${mode === 'cleanup' ? 'bg-emerald-600 text-white shadow-md' : 'text-emerald-600 hover:bg-emerald-200'}`}
           >
-            <Camera size={20} />
-            <span>Report Cleanup</span>
+            <Camera size={20} /><span>Report Cleanup</span>
           </button>
         </div>
 
-        <div className="mt-4">
-          {mode === "report" ? (
-            <FileUploader
-              files={reportFiles}
-              setFiles={setReportFiles}
-              maxFiles={1}
-              mode="report"
-            />
-          ) : (
-            <FileUploader
-              files={cleanupFiles}
-              setFiles={setCleanupFiles}
-              maxFiles={2}
-              mode="cleanup"
-            />
-          )}
-        </div>
+        <FileUploader
+          onFilesSelected={handleFileSelection}
+          maxFiles={maxFiles}
+          mode={mode}
+        />
 
-        <div className="mt-8 flex flex-col items-center">
+        {files.length > 0 && (
+          <div className="mt-4">
+            <h3 className="font-semibold text-gray-700 mb-2">Verification Status:</h3>
+            <div className="flex flex-wrap gap-4">
+              {files.map((file, index) => (
+                <MediaPreview
+                  key={index}
+                  file={file}
+                  onRemove={() => handleRemoveFile(index)}
+                  analysisStatus={analysisStatus}
+                />
+              ))}
+            </div>
+            {analysisError && (
+              <p className="text-sm text-red-600">{analysisError}</p>
+            )}
+          </div>
+        )}
+
+        <div className="mt-8 flex flex-col items-center gap-4">
           <button
             onClick={handleTrackLocation}
             disabled={isTracking}
-            className="w-full flex items-center justify-center gap-3 bg-emerald-600 text-white font-bold py-4 rounded-full hover:bg-emerald-700 transition-all duration-300 shadow-lg disabled:bg-gray-400"
+            className="w-full flex items-center justify-center gap-3 bg-blue-600 text-white font-bold py-3 rounded-full hover:bg-blue-700 transition-all shadow-lg disabled:bg-gray-400"
           >
-            {isTracking ? (
-              <>
-                <LoaderCircle size={24} className="animate-spin" />
-                <span>Acquiring Location...</span>
-              </>
-            ) : (
-              <>
-                <MapPin size={24} />
-                <span>Track Live Location</span>
-              </>
-            )}
+            {isTracking ? <LoaderCircle className="animate-spin" /> : <MapPin />}
+            <span>{location ? 'Location Acquired!' : 'Step 1: Get Location'}</span>
           </button>
-          {location && (
-            <div className="mt-4 text-center bg-emerald-100 p-3 rounded-lg text-emerald-700 text-sm font-medium">
-              Location Acquired: {location.lat.toFixed(4)},{" "}
-              {location.lon.toFixed(4)}
-            </div>
-          )}
-          {locationError && (
-            <div className="mt-4 text-center bg-red-100 p-3 rounded-lg text-red-700 text-sm font-medium">
-              {locationError}
-            </div>
-          )}
+
+          <button
+            onClick={handleSubmitReport}
+            disabled={!isSubmittable}
+            className="w-full flex items-center justify-center gap-3 bg-emerald-600 text-white font-bold py-4 rounded-full hover:bg-emerald-700 transition-all shadow-lg disabled:bg-gray-400 disabled:cursor-not-allowed"
+          >
+            <Sparkles size={20} />
+            <span>Step 2: Submit Verified Report</span>
+          </button>
         </div>
       </div>
     </div>
