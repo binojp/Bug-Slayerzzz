@@ -27,7 +27,29 @@ import {
   Tooltip,
   Legend,
 } from "chart.js";
+import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 import TrashMap from "./Heatmap";
+
+// --- Green Spot Icon for WasteMap ---
+const greenSpotIcon = new L.Icon({
+  iconUrl: "https://maps.google.com/mapfiles/ms/icons/green-dot.png",
+  iconSize: [32, 32],
+  iconAnchor: [16, 32],
+  popupAnchor: [0, -32],
+});
+
+// --- Example Waste Data (10 spots around Cheruthuruthy) ---
+const wasteData = Array.from({ length: 10 }, (_, i) => ({
+  id: i + 1,
+  pos: [
+    10.7512 + (Math.random() - 0.5) * 0.02, // Slight variation in latitude
+    76.2811 + (Math.random() - 0.5) * 0.02, // Slight variation in longitude
+  ],
+  severity: ["Low", "Medium", "High"][Math.floor(Math.random() * 3)],
+}));
+
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -470,6 +492,7 @@ function UserDash() {
             </div>
           </div>
         )}
+
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
             <h2 className="text-lg sm:text-xl font-semibold text-gray-800">
@@ -503,14 +526,42 @@ function UserDash() {
               <TrashMap className="w-full h-full" />
             </div>
           ) : (
-            <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-lg h-48 sm:h-64 flex items-center justify-center border border-emerald-100">
-              <div className="text-center">
-                <Map className="w-10 h-10 sm:w-12 sm:h-12 text-emerald-400 mx-auto mb-3" />
-                <p className="text-emerald-600 font-medium">Bin Location Map</p>
-                <p className="text-emerald-500 text-xs sm:text-sm mt-1">
-                  Interactive map coming soon
-                </p>
-              </div>
+            <div className="rounded-lg h-48 sm:h-64 border border-emerald-100 overflow-hidden">
+              <MapContainer
+                center={[10.7512, 76.2811]}
+                zoom={14}
+                className="w-full h-full"
+                style={{ zIndex: 0 }}
+              >
+                <TileLayer
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a>'
+                />
+                {wasteData.map((spot) => (
+                  <Marker
+                    key={spot.id}
+                    position={spot.pos}
+                    icon={greenSpotIcon}
+                  >
+                    <Popup>
+                      <div className="text-lg font-semibold">
+                        Waste Severity:{" "}
+                        <span
+                          className={
+                            spot.severity === "High"
+                              ? "text-red-600"
+                              : spot.severity === "Medium"
+                              ? "text-yellow-600"
+                              : "text-green-600"
+                          }
+                        >
+                          {spot.severity}
+                        </span>
+                      </div>
+                    </Popup>
+                  </Marker>
+                ))}
+              </MapContainer>
             </div>
           )}
         </div>

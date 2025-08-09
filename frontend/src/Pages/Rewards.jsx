@@ -1,6 +1,5 @@
 "use client";
 import { useState, useEffect } from "react";
-import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { Check, Gift, ShoppingBag, Leaf, Award, Star } from "lucide-react";
 
@@ -46,9 +45,10 @@ export default function RewardsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Fetch user points and redeemed rewards
+  // Initialize and fetch user data from localStorage
   useEffect(() => {
-    const fetchUserData = async () => {
+    const fetchUserData = () => {
+      // Check for token (optional, depending on your authentication needs)
       const token = localStorage.getItem("token");
       if (!token) {
         setError("Please log in to view rewards.");
@@ -58,21 +58,25 @@ export default function RewardsPage() {
       }
 
       try {
-        const response = await axios.get("https://192.168.82.139:5000/api/user", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        setUserPoints(response.data.totalPoints || 0);
-        setRedeemedItems(response.data.redeemedRewards || []);
+        // Initialize localStorage if not set
+        if (!localStorage.getItem("totalPoints")) {
+          localStorage.setItem("totalPoints", "1000"); // Default points, adjust as needed
+        }
+        if (!localStorage.getItem("redeemedRewards")) {
+          localStorage.setItem("redeemedRewards", JSON.stringify([]));
+        }
+
+        // Fetch data from localStorage
+        const totalPoints =
+          parseInt(localStorage.getItem("totalPoints"), 10) || 0;
+        const redeemedRewards =
+          JSON.parse(localStorage.getItem("redeemedRewards")) || [];
+        setUserPoints(totalPoints);
+        setRedeemedItems(redeemedRewards);
         setLoading(false);
       } catch (err) {
-        console.error("Fetch Error:", err.response?.data || err.message);
-        if (err.response?.status === 401) {
-          setError("Session expired. Please log in again.");
-          localStorage.removeItem("token");
-          navigate("/login");
-        } else {
-          setError(err.response?.data?.message || "Failed to fetch user data");
-        }
+        console.error("LocalStorage Error:", err.message);
+        setError("Failed to fetch user data from local storage.");
         setLoading(false);
       }
     };
@@ -81,7 +85,7 @@ export default function RewardsPage() {
   }, [navigate]);
 
   // Handle reward redemption
-  const handleRedeemClick = async (reward) => {
+  const handleRedeemClick = (reward) => {
     const token = localStorage.getItem("token");
     if (!token) {
       setError("Please log in to redeem rewards.");
@@ -100,30 +104,31 @@ export default function RewardsPage() {
       !redeemedItems.some((item) => item.title === reward.title)
     ) {
       try {
-        // Update user points and add reward in one API call
-        const response = await axios.patch(
-          "https://192.168.82.139:5000/api/user",
+        // Update local state and localStorage
+        const updatedPoints = pointsAfterRedemption - reward.points;
+        const updatedRedeemedItems = [
+          ...redeemedItems,
           {
-            totalPoints: pointsAfterRedemption - reward.points,
-            reward: {
-              title: reward.title,
-              description: reward.description,
-              points: reward.points,
-            },
+            title: reward.title,
+            description: reward.description,
+            points: reward.points,
           },
-          { headers: { Authorization: `Bearer ${token}` } }
+        ];
+
+        // Update localStorage
+        localStorage.setItem("totalPoints", updatedPoints.toString());
+        localStorage.setItem(
+          "redeemedRewards",
+          JSON.stringify(updatedRedeemedItems)
         );
 
         // Update local state
-        setRedeemedItems(response.data.redeemedRewards);
-        setUserPoints(response.data.totalPoints);
+        setUserPoints(updatedPoints);
+        setRedeemedItems(updatedRedeemedItems);
         setError(null);
       } catch (err) {
-        console.error("Redeem Error:", err.response?.data || err.message);
-        setError(
-          err.response?.data?.message ||
-            "Failed to redeem reward. Please try again."
-        );
+        console.error("Redeem Error:", err.message);
+        setError("Failed to redeem reward. Please try again.");
       }
     } else {
       setError(
@@ -147,7 +152,8 @@ export default function RewardsPage() {
     ? (userPoints / nextReward.points) * 100
     : 100;
 
-  if (loading) return <div className="text-center text-gray-600">Loading...</div>;
+  if (loading)
+    return <div className="text-center text-gray-600">Loading...</div>;
 
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">

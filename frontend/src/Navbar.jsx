@@ -101,7 +101,7 @@ export default function Header() {
         <div className="flex h-16 justify-between items-center">
           {/* Logo */}
           <div className="flex items-center">
-            <NavLink to="/" className="flex items-center space-x-2">
+            <NavLink to="/user/dashboard" className="flex items-center space-x-2">
               <span className="text-xl font-bold text-green-700">
                 CleanSweep
               </span>
